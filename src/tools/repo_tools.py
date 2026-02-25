@@ -2,14 +2,12 @@
 src/tools/repo_tools.py
 ───────────────────────
 Forensic tools for the RepoInvestigator (Code Detective).
-
 Key design principles:
-  • AST-based analysis, NOT regex — robust, not brittle
-  • Sandboxed git via tempfile.TemporaryDirectory + subprocess.run
-  • Graceful error handling for all system-level calls
-  • Returns structured Evidence objects, never raw strings
+• AST-based analysis, NOT regex — robust, not brittle
+• Sandboxed git via tempfile.TemporaryDirectory + subprocess.run
+• Graceful error handling for all system-level calls
+• Returns structured Evidence objects, never raw strings
 """
-
 import ast
 import logging
 import os
@@ -17,7 +15,6 @@ import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-
 from src.state import Evidence
 
 logger = logging.getLogger(__name__)
@@ -25,9 +22,9 @@ logger = logging.getLogger(__name__)
 SKIP_DIRS = {".git", "__pycache__", ".venv", "venv", "node_modules", ".mypy_cache", ".tox"}
 
 
-# ─────────────────────────────────────────────
-#  SANDBOXED GIT OPERATIONS
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# SANDBOXED GIT OPERATIONS
+# ─────────────────────────────────────────────────────────────
 
 def clone_repo_sandboxed(
     repo_url: str,
@@ -36,7 +33,6 @@ def clone_repo_sandboxed(
 ) -> Tuple[Optional[str], Optional[tempfile.TemporaryDirectory]]:
     """
     Clone a repository into an isolated TemporaryDirectory.
-
     Safety contract:
       • Never uses os.system — all subprocess calls capture stdout/stderr
       • Clone target is always tmpdir.name, never CWD
@@ -113,7 +109,7 @@ def extract_git_history(repo_path: str) -> Evidence:
             content=content,
             location=f"{repo_path}/.git",
             rationale=(
-                f"{n} commits found. "
+                f"{n} commits found.  "
                 + ("Progressive development detected." if not is_monolithic
                    else "Monolithic / bulk upload pattern detected.")
             ),
@@ -127,29 +123,28 @@ def extract_git_history(repo_path: str) -> Evidence:
         return _error_evidence("Verify atomic git commit history", repo_path, str(exc), "")
 
 
-# ─────────────────────────────────────────────
-#  AST VISITOR
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# AST VISITOR
+# ─────────────────────────────────────────────────────────────
 
 class ASTVisitor(ast.NodeVisitor):
     """
     Walk a Python AST and extract structural metadata:
-      classes       – name + base class names + line number
-      function_calls – fully qualified call strings (e.g. 'builder.add_edge')
-      imports        – module paths (Import + ImportFrom)
-      assignments    – unparsed assignment statements
+    classes       – name + base class names + line number
+    function_calls – fully qualified call strings (e.g. 'builder.add_edge')
+    imports        – module paths (Import + ImportFrom)
+    assignments    – unparsed assignment statements
     """
-
     def __init__(self):
-        self.classes:        List[Dict[str, Any]] = []
+        self.classes: List[Dict[str, Any]] = []
         self.function_calls: List[str] = []
-        self.imports:        List[str] = []
-        self.assignments:    List[str] = []
+        self.imports: List[str] = []
+        self.assignments: List[str] = []
 
     def visit_ClassDef(self, node: ast.ClassDef):
         self.classes.append({
-            "name":   node.name,
-            "bases":  [ast.unparse(b) for b in node.bases],
+            "name": node.name,
+            "bases": [ast.unparse(b) for b in node.bases],
             "lineno": node.lineno,
         })
         self.generic_visit(node)
@@ -205,9 +200,9 @@ def scan_directory_for_python(root: str) -> List[str]:
     return py_files
 
 
-# ─────────────────────────────────────────────
-#  FORENSIC PROTOCOL A — STATE MANAGEMENT
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# FORENSIC PROTOCOL A — STATE MANAGEMENT
+# ─────────────────────────────────────────────────────────────
 
 def analyze_state_management(repo_path: str) -> Evidence:
     """
@@ -219,12 +214,11 @@ def analyze_state_management(repo_path: str) -> Evidence:
         os.path.join(repo_path, "src", "graph.py"),
         os.path.join(repo_path, "state.py"),
     ]
-
-    found_pydantic   = False
+    found_pydantic = False
     found_typed_dict = False
-    found_reducers   = False
-    snippet          = ""
-    location         = "Not found"
+    found_reducers = False
+    snippet = ""
+    location = "Not found"
 
     for fpath in candidates:
         if not os.path.exists(fpath):
@@ -234,7 +228,7 @@ def analyze_state_management(repo_path: str) -> Evidence:
             continue
         location = fpath
 
-        pydantic_classes  = [c for c in v.classes if "BaseModel" in c["bases"]]
+        pydantic_classes = [c for c in v.classes if "BaseModel" in c["bases"]]
         typeddict_classes = [c for c in v.classes if "TypedDict" in c["bases"]]
 
         if pydantic_classes:
@@ -246,13 +240,13 @@ def analyze_state_management(repo_path: str) -> Evidence:
 
         # Check for operator reducers in imports + assignments
         has_operator_import = any("operator" in imp for imp in v.imports)
-        has_reducer_assign  = any(
+        has_reducer_assign = any(
             "operator.add" in a or "operator.ior" in a for a in v.assignments
         )
         if has_operator_import or has_reducer_assign:
             found_reducers = True
 
-    found      = found_pydantic and found_typed_dict
+    found = found_pydantic and found_typed_dict
     confidence = 0.92 if (found and found_reducers) else (0.60 if found else 0.15)
 
     return Evidence(
@@ -261,7 +255,7 @@ def analyze_state_management(repo_path: str) -> Evidence:
         content=snippet.strip() or "No relevant state files found",
         location=location,
         rationale=(
-            f"Pydantic={found_pydantic}, TypedDict={found_typed_dict}, "
+            f"Pydantic={found_pydantic}, TypedDict={found_typed_dict},  "
             f"Reducers(operator.add/ior)={found_reducers}"
         ),
         confidence=confidence,
@@ -269,9 +263,9 @@ def analyze_state_management(repo_path: str) -> Evidence:
     )
 
 
-# ─────────────────────────────────────────────
-#  FORENSIC PROTOCOL B — GRAPH ORCHESTRATION
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# FORENSIC PROTOCOL B — GRAPH ORCHESTRATION
+# ─────────────────────────────────────────────────────────────
 
 def analyze_graph_structure(repo_path: str) -> Evidence:
     """
@@ -279,7 +273,6 @@ def analyze_graph_structure(repo_path: str) -> Evidence:
     Uses add_edge call counts and node name analysis.
     """
     graph_files: List[Tuple[str, ASTVisitor]] = []
-
     for fpath in scan_directory_for_python(repo_path):
         v = parse_python_file(fpath)
         if not v:
@@ -301,13 +294,13 @@ def analyze_graph_structure(repo_path: str) -> Evidence:
         )
 
     has_parallel = False
-    has_fan_in   = False
+    has_fan_in = False
     snippets: List[str] = []
 
     for fpath, v in graph_files:
         add_edges = [c for c in v.function_calls if "add_edge" in c]
         add_nodes = [c for c in v.function_calls if "add_node" in c]
-        all_text  = " ".join(v.function_calls + v.assignments + v.imports).lower()
+        all_text = " ".join(v.function_calls + v.assignments + v.imports).lower()
 
         # Multiple edges from same source = fan-out heuristic
         if len(add_edges) >= 5:
@@ -330,7 +323,7 @@ def analyze_graph_structure(repo_path: str) -> Evidence:
         rel = os.path.relpath(fpath, repo_path)
         snippets.append(f"{rel}: {len(add_nodes)} nodes, {len(add_edges)} edges")
 
-    found      = has_parallel
+    found = has_parallel
     confidence = 0.85 if (found and has_fan_in) else (0.55 if found else 0.70)
 
     return Evidence(
@@ -347,9 +340,9 @@ def analyze_graph_structure(repo_path: str) -> Evidence:
     )
 
 
-# ─────────────────────────────────────────────
-#  FORENSIC PROTOCOL C — TOOL SANDBOXING
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# FORENSIC PROTOCOL C — TOOL SANDBOXING
+# ─────────────────────────────────────────────────────────────
 
 def analyze_tool_sandboxing(repo_path: str) -> Evidence:
     """
@@ -358,20 +351,19 @@ def analyze_tool_sandboxing(repo_path: str) -> Evidence:
     tools_dir = os.path.join(repo_path, "src", "tools")
     if not os.path.exists(tools_dir):
         tools_dir = repo_path
-
-    uses_tempfile    = False
-    uses_os_system   = False
-    uses_subprocess  = False
+    uses_tempfile = False
+    uses_os_system = False
+    uses_subprocess = False
     has_error_handling = False
-    snippet          = ""
-    location         = tools_dir
+    snippet = ""
+    location = tools_dir
 
     for fpath in scan_directory_for_python(tools_dir):
         v = parse_python_file(fpath)
         if not v:
             continue
 
-        imp_str   = " ".join(v.imports)
+        imp_str = " ".join(v.imports)
         calls_str = " ".join(v.function_calls)
 
         if "tempfile" in imp_str:
@@ -408,13 +400,13 @@ def analyze_tool_sandboxing(repo_path: str) -> Evidence:
         goal="Verify sandboxed git clone with tempfile.TemporaryDirectory and error handling",
         found=is_secure,
         content=snippet or (
-            f"tempfile={uses_tempfile}, os.system={uses_os_system}, "
+            f"tempfile={uses_tempfile}, os.system={uses_os_system},  "
             f"subprocess={uses_subprocess}, try/except={has_error_handling}"
         ),
         location=location,
         rationale=(
-            f"Security: tempfile={uses_tempfile}, os.system={uses_os_system} "
-            f"(BAD if True), error_handling={has_error_handling}. "
+            f"Security: tempfile={uses_tempfile}, os.system={uses_os_system}  "
+            f"(BAD if True), error_handling={has_error_handling}.  "
             + (f"Charges: {charges}" if charges else "No violations.")
         ),
         confidence=confidence,
@@ -422,9 +414,9 @@ def analyze_tool_sandboxing(repo_path: str) -> Evidence:
     )
 
 
-# ─────────────────────────────────────────────
-#  FORENSIC PROTOCOL D — STRUCTURED OUTPUT
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# FORENSIC PROTOCOL D — STRUCTURED OUTPUT
+# ─────────────────────────────────────────────────────────────
 
 def analyze_structured_output(repo_path: str) -> Evidence:
     """
@@ -436,12 +428,11 @@ def analyze_structured_output(repo_path: str) -> Evidence:
         os.path.join(repo_path, "src", "judges.py"),
         os.path.join(repo_path, "judges.py"),
     ]
-
-    found_structured      = False
+    found_structured = False
     found_pydantic_binding = False
-    found_retry           = False
-    snippet               = ""
-    location              = "src/nodes/judges.py (not found)"
+    found_retry = False
+    snippet = ""
+    location = "src/nodes/judges.py (not found)"
 
     for fpath in candidates:
         if not os.path.exists(fpath):
@@ -480,8 +471,8 @@ def analyze_structured_output(repo_path: str) -> Evidence:
         content=snippet.strip() or "No structured output enforcement found",
         location=location,
         rationale=(
-            f"Structured output enforced: {found_structured}. "
-            f"Pydantic schema binding: {found_pydantic_binding}. "
+            f"Structured output enforced: {found_structured}.  "
+            f"Pydantic schema binding: {found_pydantic_binding}.  "
             f"Retry logic present: {found_retry}."
         ),
         confidence=confidence,
@@ -490,9 +481,9 @@ def analyze_structured_output(repo_path: str) -> Evidence:
     )
 
 
-# ─────────────────────────────────────────────
-#  HELPERS
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# HELPERS
+# ─────────────────────────────────────────────────────────────
 
 def _error_evidence(goal: str, location: str, rationale: str, content: str) -> Evidence:
     return Evidence(

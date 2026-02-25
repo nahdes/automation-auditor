@@ -2,18 +2,15 @@
 src/tools/doc_tools.py
 ──────────────────────
 Forensic tools for the DocAnalyst (Paperwork Detective).
-
 Implements:
-  • PDF ingestion with chunking (RAG-lite) — tries docling → pypdf → pdfminer
-  • Theoretical-depth keyword + context verification
-  • Cross-reference hallucination check (claimed file paths vs repo files)
+• PDF ingestion with chunking (RAG-lite) — tries docling → pypdf → pdfminer
+• Theoretical-depth keyword + context verification
+• Cross-reference hallucination check (claimed file paths vs repo files)
 """
-
 import logging
 import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-
 from src.state import DocEvidence, Evidence
 
 logger = logging.getLogger(__name__)
@@ -38,9 +35,9 @@ DEPTH_INDICATORS = [
 ]
 
 
-# ─────────────────────────────────────────────
-#  PDF INGESTION — RAG-LITE
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# PDF INGESTION — RAG-LITE
+# ─────────────────────────────────────────────────────────────
 
 def ingest_pdf(path: str) -> List[Dict[str, str]]:
     """
@@ -92,7 +89,7 @@ def ingest_pdf(path: str) -> List[Dict[str, str]]:
         from pdfminer.layout import LTTextContainer
         chunks = []
         for i, layout in enumerate(extract_pages(path)):
-            text = "".join(
+            text = " ".join(
                 elem.get_text() for elem in layout if isinstance(elem, LTTextContainer)
             )
             if text.strip():
@@ -119,9 +116,9 @@ def query_chunks(chunks: List[Dict[str, str]], query: str, top_k: int = 3) -> Li
     return [text for score, text in scored[:top_k] if score > 0]
 
 
-# ─────────────────────────────────────────────
-#  FORENSIC PROTOCOL A — THEORETICAL DEPTH
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# FORENSIC PROTOCOL A — THEORETICAL DEPTH
+# ─────────────────────────────────────────────────────────────
 
 def analyze_theoretical_depth(chunks: List[Dict[str, str]]) -> Evidence:
     """
@@ -129,8 +126,7 @@ def analyze_theoretical_depth(chunks: List[Dict[str, str]]) -> Evidence:
     A concept must appear in a substantive explanation, not just the intro.
     """
     full_text = " ".join(c["text"] for c in chunks)
-    lower     = full_text.lower()
-
+    lower = full_text.lower()
     found_concepts: List[str] = []
     context_snippets: List[str] = []
 
@@ -139,12 +135,12 @@ def analyze_theoretical_depth(chunks: List[Dict[str, str]]) -> Evidence:
         if idx >= 0:
             found_concepts.append(concept)
             start = max(0, idx - 150)
-            end   = min(len(full_text), idx + 250)
+            end = min(len(full_text), idx + 250)
             context_snippets.append(f"[{concept}]: ...{full_text[start:end].strip()}...")
 
     depth_score = sum(1 for phrase in DEPTH_INDICATORS if phrase in lower)
-    has_deep    = len(found_concepts) >= 3 and depth_score >= 4
-    confidence  = min(
+    has_deep = len(found_concepts) >= 3 and depth_score >= 4
+    confidence = min(
         0.95,
         (len(found_concepts) / len(DEEP_CONCEPTS)) * 0.65 + (depth_score / 10) * 0.35,
     )
@@ -155,8 +151,8 @@ def analyze_theoretical_depth(chunks: List[Dict[str, str]]) -> Evidence:
         content="\n\n".join(context_snippets[:5]) or "No relevant concepts found",
         location="pdf_report",
         rationale=(
-            f"Found {len(found_concepts)}/{len(DEEP_CONCEPTS)} concepts: {found_concepts}. "
-            f"Depth indicators: {depth_score}/10. "
+            f"Found {len(found_concepts)}/{len(DEEP_CONCEPTS)} concepts: {found_concepts}.  "
+            f"Depth indicators: {depth_score}/10.  "
             f"Assessment: {'Deep understanding' if has_deep else 'Keyword-dropping suspected'}."
         ),
         confidence=confidence,
@@ -164,14 +160,14 @@ def analyze_theoretical_depth(chunks: List[Dict[str, str]]) -> Evidence:
     )
 
 
-# ─────────────────────────────────────────────
-#  FORENSIC PROTOCOL B — HALLUCINATION CHECK
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# FORENSIC PROTOCOL B — HALLUCINATION CHECK
+# ─────────────────────────────────────────────────────────────
 
 def extract_file_claims(chunks: List[Dict[str, str]]) -> List[str]:
     """Extract all file-path claims from PDF text using a regex pattern."""
     text = " ".join(c["text"] for c in chunks)
-    pattern = r'(?:src/|\./)[\\w/._-]+\\.(?:py|json|md|txt|yaml|yml|toml)'
+    pattern = r'(?:src/|./)[\w/._-]+\.(?:py|json|md|txt|yaml|yml|toml)'
     return list(set(re.findall(pattern, text)))
 
 
@@ -205,7 +201,7 @@ def cross_reference_claims(
         except Exception:
             pass
 
-    verified:     List[str] = []
+    verified: List[str] = []
     hallucinated: List[str] = []
 
     for claim in claimed:
@@ -215,7 +211,7 @@ def cross_reference_claims(
         else:
             hallucinated.append(claim)
 
-    all_clean  = len(hallucinated) == 0
+    all_clean = len(hallucinated) == 0
     confidence = 0.92 if all_clean else max(0.20, len(verified) / max(len(claimed), 1))
 
     lines = []
@@ -230,8 +226,8 @@ def cross_reference_claims(
         content="\n".join(lines),
         location="pdf_report + github_repo",
         rationale=(
-            f"{len(verified)} verified, {len(hallucinated)} hallucinated "
-            f"out of {len(claimed)} claims. "
+            f"{len(verified)} verified, {len(hallucinated)} hallucinated  "
+            f"out of {len(claimed)} claims.  "
             + ("All claims verified." if all_clean
                else f"WARNING: {len(hallucinated)} non-existent paths claimed.")
         ),
@@ -240,9 +236,9 @@ def cross_reference_claims(
     )
 
 
-# ─────────────────────────────────────────────
-#  MAIN ANALYSIS ENTRY POINT
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# MAIN ANALYSIS ENTRY POINT
+# ─────────────────────────────────────────────────────────────
 
 def analyze_pdf_report(
     pdf_path: str,
@@ -254,7 +250,6 @@ def analyze_pdf_report(
     Gracefully handles missing PDF or parse failures.
     """
     import os
-
     if not os.path.exists(pdf_path):
         blank = Evidence(
             goal="Read PDF report",
@@ -286,10 +281,10 @@ def analyze_pdf_report(
             hallucination_check=blank,
         )
 
-    theoretical  = analyze_theoretical_depth(chunks)
-    hallu_check  = cross_reference_claims(chunks, repo_files, repo_root)
-    lower        = " ".join(c["text"] for c in chunks).lower()
-    found_conc   = [c for c in DEEP_CONCEPTS if c.lower() in lower]
+    theoretical = analyze_theoretical_depth(chunks)
+    hallu_check = cross_reference_claims(chunks, repo_files, repo_root)
+    lower = " ".join(c["text"] for c in chunks).lower()
+    found_conc = [c for c in DEEP_CONCEPTS if c.lower() in lower]
 
     return DocEvidence(
         theoretical_depth=theoretical,

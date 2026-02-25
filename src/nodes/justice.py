@@ -2,38 +2,34 @@
 src/nodes/justice.py
 ─────────────────────
 Layer 3: The Supreme Court — Final Verdict
-
 The ChiefJusticeNode synthesises the dialectical conflict from Layer 2
 into a final, actionable ruling using DETERMINISTIC PYTHON LOGIC — not an LLM prompt.
-
 Constitutional rules applied (from synthesis_rules in week2_rubric.json):
-  1. security_override      — confirmed security flaw caps score at 3
-  2. fact_supremacy         — forensic evidence overrules judicial interpretation
-  3. functionality_weight   — TechLead confirmation carries highest weight for Architecture
-  4. dissent_requirement    — variance > 2 MUST include dissent summary
-  5. variance_re_evaluation — variance > 2 triggers cited-evidence re-examination first
-
+security_override      — confirmed security flaw caps score at 3
+fact_supremacy         — forensic evidence overrules judicial interpretation
+functionality_weight   — TechLead confirmation carries highest weight for Architecture
+dissent_requirement    — variance > 2 MUST include dissent summary
+variance_re_evaluation — variance > 2 triggers cited-evidence re-examination first
 Report structure: Executive Summary → Criterion Breakdown → Remediation Plan
 """
-
 import logging
 from collections import defaultdict
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
-
 from src.state import (
     AgentState, AuditReport, CriterionResult, Evidence, JudicialOpinion,
 )
 
 logger = logging.getLogger(__name__)
 
-# ─────────────────────────────────────────────
-#  SECURITY VIOLATION DETECTION
-# ─────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────
+# SECURITY VIOLATION DETECTION
+# ─────────────────────────────────────────────────────────────
 
 _SECURITY_TAGS = {
     "Security Negligence", "security violation", "shell injection",
-    "os.system", "unsanitized", "raw os.system", "Security Negligence",
+    "os.system", "unsanitized", "raw os.system",
 }
 
 
@@ -65,20 +61,19 @@ def _has_defense_hallucination(opinions: List[JudicialOpinion], evidences: dict)
     return False
 
 
-# ─────────────────────────────────────────────
-#  DETERMINISTIC SCORE RESOLUTION
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# DETERMINISTIC SCORE RESOLUTION
+# ─────────────────────────────────────────────────────────────
 
 def _resolve_scores(
     p: int, d: int, t: int, criterion_id: str,
 ) -> Tuple[int, str, bool]:
     """
     Hardcoded Python conflict resolution — NOT an LLM prompt.
-
     Ladder (in priority order):
       variance ≤ 1  → consensus average (rounded)
       variance == 2 → TechLead tiebreaker (Rule of Functionality)
-      variance >  2 → re-evaluation flag set; TechLead×2 weighted average
+      variance  >  2 → re-evaluation flag set; TechLead×2 weighted average
 
     Returns (final_score, method_description, needs_re_evaluation)
     """
@@ -86,26 +81,26 @@ def _resolve_scores(
     needs_re_eval = variance > 2
 
     if variance <= 1:
-        final  = round((p + d + t) / 3)
+        final = round((p + d + t) / 3)
         method = f"Consensus (variance={variance}): averaged all three judges"
     elif variance == 2:
-        final  = t  # Rule of Functionality: TechLead is tiebreaker
+        final = t  # Rule of Functionality: TechLead is tiebreaker
         method = f"TechLead tiebreaker (variance={variance}): Tech Lead score accepted"
     else:
         # High conflict — TechLead double-weighted after re-evaluation
-        final  = round((p + t * 2 + d) / 4)
+        final = round((p + t * 2 + d) / 4)
         method = (
-            f"Weighted resolution (HIGH CONFLICT variance={variance}): "
-            f"TechLead×2 + Prosecutor×1 + Defense×1 = "
+            f"Weighted resolution (HIGH CONFLICT variance={variance}):  "
+            f"TechLead×2 + Prosecutor×1 + Defense×1 =  "
             f"({p} + {t*2} + {d}) / 4 = {final}"
         )
 
     return final, method, needs_re_eval
 
 
-# ─────────────────────────────────────────────
-#  CONSTITUTIONAL OVERRIDES
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# CONSTITUTIONAL OVERRIDES
+# ─────────────────────────────────────────────────────────────
 
 def _apply_overrides(
     score: int,
@@ -142,9 +137,9 @@ def _apply_overrides(
     return score, overrides
 
 
-# ─────────────────────────────────────────────
-#  VARIANCE RE-EVALUATION
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# VARIANCE RE-EVALUATION
+# ─────────────────────────────────────────────────────────────
 
 def _re_evaluate(
     criterion_id: str,
@@ -161,12 +156,11 @@ def _re_evaluate(
         f"⚠ HIGH-VARIANCE RE-EVALUATION — criterion '{criterion_id}'",
         "",
     ]
-
     for judge_label in ["Prosecutor", "Defense", "TechLead"]:
         op = next((o for o in opinions if o.judge == judge_label), None)
         if not op:
             continue
-        verified   = [k for k in op.cited_evidence if k in all_keys]
+        verified = [k for k in op.cited_evidence if k in all_keys]
         unverified = [k for k in op.cited_evidence if k not in all_keys]
 
         lines.append(f"**{judge_label}** (score {op.score}):")
@@ -179,60 +173,59 @@ def _re_evaluate(
 
     # Determine whose argument has stronger forensic backing
     p_op = next((o for o in opinions if o.judge == "Prosecutor"), None)
-    d_op = next((o for o in opinions if o.judge == "Defense"),    None)
+    d_op = next((o for o in opinions if o.judge == "Defense"), None)
     p_ver = len([k for k in (p_op.cited_evidence if p_op else []) if k in all_keys])
     d_ver = len([k for k in (d_op.cited_evidence if d_op else []) if k in all_keys])
 
     if p_ver > d_ver:
         lines.append(
-            "Re-evaluation finding: Prosecutor has stronger forensic backing. "
+            "Re-evaluation finding: Prosecutor has stronger forensic backing.  "
             "TechLead score accepted as final (Rule of Functionality)."
         )
     elif d_ver > p_ver:
         lines.append(
-            "Re-evaluation finding: Defense has stronger forensic backing. "
+            "Re-evaluation finding: Defense has stronger forensic backing.  "
             "Score adjusted upward from weighted average."
         )
     else:
         lines.append(
-            "Re-evaluation finding: Equal forensic backing. "
+            "Re-evaluation finding: Equal forensic backing.  "
             "TechLead tiebreaker accepted per Rule of Functionality."
         )
 
     return "\n".join(lines)
 
 
-# ─────────────────────────────────────────────
-#  MARKDOWN REPORT GENERATOR
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# MARKDOWN REPORT GENERATOR
+# ─────────────────────────────────────────────────────────────
 
 def generate_markdown_report(report: AuditReport) -> str:
     """
     Serialise AuditReport → structured Markdown.
     Structure: Executive Summary → Criterion Breakdown → Remediation Plan
     """
-    now   = datetime.now().strftime("%Y-%m-%d %H:%M UTC")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M UTC")
     lines = []
-
     lines.append("# 🏛 Automaton Auditor — Forensic Audit Report")
     lines.append(f"> Generated: {now}")
     lines.append(f"> Repository: `{report.repo_url}`")
-    lines.append("")
+    lines.append(" ")
     lines.append("---")
-    lines.append("")
+    lines.append(" ")
 
     # Executive Summary
     lines.append("## Executive Summary")
-    lines.append("")
+    lines.append(" ")
     lines.append(report.executive_summary)
-    lines.append("")
+    lines.append(" ")
 
-    n      = len(report.criteria)
+    n = len(report.criteria)
     max_sc = n * 5
-    pct    = (report.overall_score / 5.0) * 100 if report.overall_score else 0
+    pct = (report.overall_score / 5.0) * 100 if report.overall_score else 0
     verdict = (
-        "PASS — Master Thinker"                if pct >= 80 else
-        "PASS — Competent Orchestrator"         if pct >= 60 else
+        "PASS — Master Thinker" if pct >= 80 else
+        "PASS — Competent Orchestrator" if pct >= 60 else
         "BORDERLINE — Vibe Coder with Potential" if pct >= 40 else
         "FAIL — Vibe Coder"
     )
@@ -243,33 +236,33 @@ def generate_markdown_report(report: AuditReport) -> str:
     lines.append(f"| Percentage | {pct:.1f}% |")
     lines.append(f"| Verdict | **{verdict}** |")
     lines.append(f"| Criteria Evaluated | {n} / 10 |")
-    lines.append("")
+    lines.append(" ")
     lines.append("### Score Summary")
-    lines.append("")
+    lines.append(" ")
     lines.append("| # | Criterion | Score | Override |")
     lines.append("|---|-----------|-------|---------|")
     for i, cr in enumerate(report.criteria, 1):
         flag = "⚠ OVERRIDE" if cr.overrides_applied else "—"
         lines.append(f"| {i} | {cr.dimension_name} | **{cr.final_score}/5** | {flag} |")
-    lines.append("")
+    lines.append(" ")
     lines.append("---")
-    lines.append("")
+    lines.append(" ")
 
     # Criterion Breakdown
     lines.append("## Criterion Breakdown")
-    lines.append("")
+    lines.append(" ")
     for cr in report.criteria:
         lines.append(f"### {cr.dimension_name}")
         lines.append(f"**Final Score: {cr.final_score}/5**")
-        lines.append("")
+        lines.append(" ")
 
         for ov in cr.overrides_applied:
             lines.append(f"> 🔴 {ov}")
         if cr.overrides_applied:
-            lines.append("")
+            lines.append(" ")
 
         lines.append("#### Judge Opinions")
-        lines.append("")
+        lines.append(" ")
         icons = {"Prosecutor": "⚔", "Defense": "🛡", "TechLead": "🔧"}
         for op in cr.judge_opinions:
             icon = icons.get(op.judge, "⚖")
@@ -279,47 +272,46 @@ def generate_markdown_report(report: AuditReport) -> str:
                 lines.append(f"> *Cited:* {', '.join(op.cited_evidence)}")
             if op.charges:
                 lines.append(f"> *Charges:* {', '.join(op.charges)}")
-            lines.append("")
+            lines.append(" ")
 
         if cr.dissent_summary:
             lines.append("#### ⚖ Dissent Summary")
-            lines.append("")
+            lines.append(" ")
             lines.append(cr.dissent_summary)
-            lines.append("")
+            lines.append(" ")
 
         lines.append("#### Remediation")
-        lines.append("")
+        lines.append(" ")
         lines.append(cr.remediation)
-        lines.append("")
+        lines.append(" ")
         lines.append("---")
-        lines.append("")
+        lines.append(" ")
 
     # Remediation Plan
     lines.append("## Remediation Plan")
-    lines.append("")
+    lines.append(" ")
     lines.append(report.remediation_plan)
-    lines.append("")
+    lines.append(" ")
     lines.append("---")
-    lines.append("")
+    lines.append(" ")
     lines.append(
-        "_This report was generated by the Automaton Auditor — "
+        "_This report was generated by the Automaton Auditor —  "
         "a hierarchical LangGraph swarm implementing the Digital Courtroom architecture._"
     )
 
     return "\n".join(lines)
 
 
-# ─────────────────────────────────────────────
-#  CHIEF JUSTICE NODE
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# CHIEF JUSTICE NODE
+# ─────────────────────────────────────────────────────────────
 
 def chief_justice_node(state: AgentState) -> dict:
     """
     ChiefJusticeNode — The Supreme Court.
-
     Applies FIVE deterministic constitutional rules in order:
       1. security_override      → cap score at 3 for security violations
-      2. fact_supremacy         → detective evidence overrules judicial opinion
+      2. fact_supremacy         → detective evidence over rules judicial opinion
       3. functionality_weight   → TechLead is tiebreaker for architecture criterion
       4. dissent_requirement    → variance > 2 MUST produce a dissent summary
       5. variance_re_evaluation → variance > 2 triggers cited-evidence re-examination
@@ -328,10 +320,10 @@ def chief_justice_node(state: AgentState) -> dict:
     """
     logger.info("🏛 ChiefJustice: beginning synthesis...")
 
-    opinions   = state.get("opinions", [])
-    evidences  = state.get("evidences", {})
+    opinions = state.get("opinions", [])
+    evidences = state.get("evidences", {})
     dimensions = state.get("rubric_dimensions", [])
-    repo_url   = state.get("repo_url", "unknown")
+    repo_url = state.get("repo_url", "unknown")
 
     if not opinions:
         logger.warning("ChiefJustice: no opinions received")
@@ -350,17 +342,17 @@ def chief_justice_node(state: AgentState) -> dict:
         by_criterion[op.criterion_id].append(op)
 
     dim_lookup = {d["id"]: d for d in dimensions}
-    results:       List[CriterionResult] = []
+    results: List[CriterionResult] = []
     all_remediations: List[str] = []
     total_score = 0.0
 
     for criterion_id, crit_opinions in by_criterion.items():
-        dim      = dim_lookup.get(criterion_id, {})
+        dim = dim_lookup.get(criterion_id, {})
         dim_name = dim.get("name", criterion_id)
 
         p_op = next((o for o in crit_opinions if o.judge == "Prosecutor"), None)
-        d_op = next((o for o in crit_opinions if o.judge == "Defense"),    None)
-        t_op = next((o for o in crit_opinions if o.judge == "TechLead"),   None)
+        d_op = next((o for o in crit_opinions if o.judge == "Defense"), None)
+        t_op = next((o for o in crit_opinions if o.judge == "TechLead"), None)
 
         p = p_op.score if p_op else 3
         d = d_op.score if d_op else 3
@@ -386,7 +378,7 @@ def chief_justice_node(state: AgentState) -> dict:
         variance = max(p, d, t) - min(p, d, t)
         if variance > 2 and not dissent:
             dissent = (
-                f"Dissent: Prosecutor={p}, Defense={d}, TechLead={t}. "
+                f"Dissent: Prosecutor={p}, Defense={d}, TechLead={t}.  "
                 f"Resolution: {resolution}."
             )
         if overrides:
@@ -419,18 +411,18 @@ def chief_justice_node(state: AgentState) -> dict:
             " [OVERRIDDEN]" if overrides else "",
         )
 
-    n       = len(results)
+    n = len(results)
     overall = total_score / n if n > 0 else 0.0
-    pct     = (overall / 5.0) * 100
+    pct = (overall / 5.0) * 100
 
     grade, summary_line = (
-        ("Master Thinker",              "Submission demonstrates deep architectural understanding.")
+        ("Master Thinker", "Submission demonstrates deep architectural understanding.")
         if pct >= 80 else
-        ("Competent Orchestrator",       "Core requirements met with room for improvement.")
+        ("Competent Orchestrator", "Core requirements met with room for improvement.")
         if pct >= 60 else
-        ("Vibe Coder with Potential",    "Significant gaps; fundamental patterns present but incomplete.")
+        ("Vibe Coder with Potential", "Significant gaps; fundamental patterns present but incomplete.")
         if pct >= 40 else
-        ("Vibe Coder",                  "Critical architectural requirements are missing.")
+        ("Vibe Coder", "Critical architectural requirements are missing.")
     )
 
     security_count = sum(
@@ -444,8 +436,8 @@ def chief_justice_node(state: AgentState) -> dict:
         f"- **Criteria Evaluated:** {n} of {len(dimensions)}\n"
         f"- **Security Violations:** {security_count} override(s) applied\n"
         f"- **Synthesis Method:** Deterministic conflict resolution (5 constitutional rules)\n\n"
-        f"The three-judge dialectical bench (Prosecutor, Defense, TechLead) evaluated "
-        f"{n} rubric criteria. The Chief Justice applied constitutional override rules "
+        f"The three-judge dialectical bench (Prosecutor, Defense, TechLead) evaluated  "
+        f"{n} rubric criteria. The Chief Justice applied constitutional override rules  "
         f"to produce this final verdict."
     )
 

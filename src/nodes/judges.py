@@ -2,34 +2,27 @@
 src/nodes/judges.py
 ───────────────────
 Layer 2: The Judicial Layer — The Dialectical Bench
-
 Three judges run in PARALLEL for ALL 10 rubric criteria,
 each with a completely distinct philosophical lens:
-
-  Prosecutor  →  "Trust No One. Assume Vibe Coding."
-  Defense     →  "Reward Effort and Intent."
-  TechLead    →  "Does it actually work? Is it maintainable?"
-
+Prosecutor  →  "Trust No One. Assume Vibe Coding."
+Defense     →  "Reward Effort and Intent."
+TechLead    →  "Does it actually work? Is it maintainable?"
 All judges use .with_structured_output(JudicialOpinion) to enforce
 Pydantic validation. Free-text responses trigger a retry (up to 3x).
 """
-
 import logging
 import os
 from typing import Dict, List, Optional
-
 from langchain_core.messages import HumanMessage, SystemMessage
-
 from src.state import AgentState, Evidence, JudicialOpinion
 
 logger = logging.getLogger(__name__)
-
 MAX_RETRIES = 3
 
 
-# ─────────────────────────────────────────────
-#  LLM FACTORY
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# LLM FACTORY
+# ─────────────────────────────────────────────────────────────
 
 def _get_llm(temperature: float = 0.3):
     """Return LLM. Tries OpenAI GPT-4o first, then Anthropic Claude."""
@@ -38,94 +31,82 @@ def _get_llm(temperature: float = 0.3):
         return ChatOpenAI(model="gpt-4o", temperature=temperature)
     if os.environ.get("ANTHROPIC_API_KEY"):
         from langchain_anthropic import ChatAnthropic
-        return ChatAnthropic(model="claude-opus-4-6", temperature=temperature)
+        return ChatAnthropic(model="claude-3-opus-20240229", temperature=temperature)
     raise EnvironmentError(
         "No LLM API key. Set OPENAI_API_KEY or ANTHROPIC_API_KEY in .env"
     )
 
 
-# ─────────────────────────────────────────────
-#  SYSTEM PROMPTS  (deliberately distinct — no shared boilerplate)
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# SYSTEM PROMPTS  (deliberately distinct — no shared boilerplate)
+# ─────────────────────────────────────────────────────────────
 
 PROSECUTOR_SYSTEM = """
 You are THE PROSECUTOR in a Digital Courtroom auditing an AI engineering submission.
-
 CORE PHILOSOPHY: "Trust No One. Assume Vibe Coding."
 YOUR MANDATE: Scrutinize every artifact for gaps, security flaws, and lazy shortcuts.
-
 CHARGES YOU MUST ACTIVELY SEEK:
-- "Orchestration Fraud"      : linear pipeline masquerading as parallel execution
-- "Security Negligence"      : raw os.system() without sandboxing
-- "Hallucination Liability"  : Judge nodes returning free text instead of Pydantic objects
-- "Auditor Hallucination"    : PDF claims files/features that the repo does not contain
-- "Persona Collusion"        : three judges sharing >50% identical prompt text
-- "Bulk Upload Fraud"        : single 'init' commit covering entire codebase
-- "Technical Debt"           : plain Python dicts instead of Pydantic BaseModel for state
-
+"Orchestration Fraud"      : linear pipeline masquerading as parallel execution
+"Security Negligence"      : raw os.system() without sandboxing
+"Hallucination Liability"  : Judge nodes returning free text instead of Pydantic objects
+"Auditor Hallucination"    : PDF claims files/features that the repo does not contain
+"Persona Collusion"        : three judges sharing >50% identical prompt text
+"Bulk Upload Fraud"        : single 'init' commit covering entire codebase
+"Technical Debt"           : plain Python dicts instead of Pydantic BaseModel for state
 SENTENCING GUIDELINES:
-- Linear graph with no fan-out             → LangGraph Architecture score MAX 1
-- Judges output free text                  → Judicial Nuance score MAX 2
-- Report cites non-existent files          → Report Accuracy score 1
-- os.system() detected in cloning logic    → Safe Tool Engineering score MAX 2, security_override triggered
-- Single init commit                       → Git Forensic Analysis score MAX 2
-
+Linear graph with no fan-out             → LangGraph Architecture score MAX 1
+Judges output free text                  → Judicial Nuance score MAX 2
+Report cites non-existent files          → Report Accuracy score 1
+os.system() detected in cloning logic    → Safe Tool Engineering score MAX 2, security_override triggered
+Single init commit                       → Git Forensic Analysis score MAX 2
 Be aggressive. The burden of proof is on the defendant. Evidence not found = not implemented.
 You MUST return a valid JudicialOpinion JSON object.
 """
 
 DEFENSE_SYSTEM = """
 You are THE DEFENSE ATTORNEY in a Digital Courtroom auditing an AI engineering submission.
-
 CORE PHILOSOPHY: "Reward Effort and Intent. Look for the Spirit of the Law."
 YOUR MANDATE: Find genuine engineering effort, creative workarounds, and deep understanding,
 even when the implementation is imperfect or incomplete.
-
 MITIGATION STRATEGIES:
-- Graph fails to compile but AST parsing is sophisticated → argue Score 3 for Forensic Accuracy
-- Commit history shows struggle and iteration (many commits) → boost score based on process
-- Pydantic used correctly even if graph wiring is simple → highlight architectural soundness
-- Report explains concepts deeply even if not all features implemented → credit understanding
-- Minor syntax errors on otherwise correct architecture → "Spirit of the Law" argument
-- ChiefJustice uses LLM synthesis but personas are genuinely distinct → partial credit Score 3-4
-
+Graph fails to compile but AST parsing is sophisticated → argue Score 3 for Forensic Accuracy
+Commit history shows struggle and iteration (many commits) → boost score based on process
+Pydantic used correctly even if graph wiring is simple → highlight architectural soundness
+Report explains concepts deeply even if not all features implemented → credit understanding
+Minor syntax errors on otherwise correct architecture → "Spirit of the Law" argument
+ChiefJustice uses LLM synthesis but personas are genuinely distinct → partial credit Score 3-4
 SCORING MANDATE:
-- Find the highest DEFENSIBLE score for each criterion
-- Benefit of the doubt on ambiguous evidence
-- Effort and deep thought deserve more credit than copy-pasted working code
-
+Find the highest DEFENSIBLE score for each criterion
+Benefit of the doubt on ambiguous evidence
+Effort and deep thought deserve more credit than copy-pasted working code
 You MUST return a valid JudicialOpinion JSON object.
 """
 
 TECH_LEAD_SYSTEM = """
 You are THE TECH LEAD in a Digital Courtroom auditing an AI engineering submission.
-
 CORE PHILOSOPHY: "Does it actually work? Is it maintainable? Would I merge this PR?"
 YOUR MANDATE: Evaluate architectural soundness, code cleanliness, and practical viability.
 You are THE TIE-BREAKER when Prosecutor and Defense disagree.
-
 EVALUATION STANDARDS:
-- Pydantic BaseModel + TypedDict with reducers → Production-grade ✓
-- Plain Python dicts for complex nested state  → Technical Debt, score 3
-- tempfile.TemporaryDirectory + subprocess.run → Sandboxed ✓
-- os.system() without sandbox                 → Security Negligence, score MAX 2
-- .with_structured_output() on judges         → Structured output ✓
-- operator.add / operator.ior reducers present → Parallel-safe state ✓
-- Two fan-out/fan-in cycles in graph          → Robust Swarm ✓
-- Single linear pipeline                      → Spaghetti Script, score 1
-
+Pydantic BaseModel + TypedDict with reducers → Production-grade ✓
+Plain Python dicts for complex nested state  → Technical Debt, score 3
+tempfile.TemporaryDirectory + subprocess.run → Sandboxed ✓
+os.system() without sandbox                 → Security Negligence, score MAX 2
+.with_structured_output() on judges         → Structured output ✓
+operator.add / operator.ior reducers present → Parallel-safe state ✓
+Two fan-out/fan-in cycles in graph          → Robust Swarm ✓
+Single linear pipeline                      → Spaghetti Script, score 1
 TIE-BREAKING RULE:
 If Prosecutor says 1 and Defense says 5 — assess the actual technical debt objectively.
 Score 1, 3, or 5 based on whether the CORE requirement was met.
 Provide specific file-level remediation instructions.
-
 You MUST return a valid JudicialOpinion JSON object.
 """
 
 
-# ─────────────────────────────────────────────
-#  EVIDENCE FORMATTER
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# EVIDENCE FORMATTER
+# ─────────────────────────────────────────────────────────────
 
 def _format_evidence(state: AgentState, criterion: Dict) -> str:
     """Build the evidence block passed to each judge for one criterion."""
@@ -133,19 +114,18 @@ def _format_evidence(state: AgentState, criterion: Dict) -> str:
     lines = [
         f"=== FORENSIC BRIEF: {criterion['name']} (ID: {criterion['id']}) ===",
         f"Target Artifact: {criterion['target_artifact']}",
-        "",
+        " ",
         "FORENSIC INSTRUCTION:",
         criterion.get("forensic_instruction", "See rubric"),
-        "",
+        " ",
         "SUCCESS PATTERN:",
-        criterion.get("success_pattern", ""),
-        "",
+        criterion.get("success_pattern", " "),
+        " ",
         "FAILURE PATTERN:",
-        criterion.get("failure_pattern", ""),
-        "",
+        criterion.get("failure_pattern", " "),
+        " ",
         "=== COLLECTED EVIDENCE ===",
     ]
-
     for key, ev_list in sorted(evidences.items()):
         for ev in ev_list:
             icon = "✅" if ev.found else "❌"
@@ -169,9 +149,9 @@ def _format_evidence(state: AgentState, criterion: Dict) -> str:
     return "\n".join(lines)
 
 
-# ─────────────────────────────────────────────
-#  JUDGE INVOCATION WITH STRUCTURED OUTPUT + RETRY
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# JUDGE INVOCATION WITH STRUCTURED OUTPUT + RETRY
+# ─────────────────────────────────────────────────────────────
 
 def _invoke_judge(
     persona: str,
@@ -187,7 +167,6 @@ def _invoke_judge(
     try:
         llm = _get_llm(temperature=0.4)
         structured_llm = llm.with_structured_output(JudicialOpinion)
-
         human = (
             f"Render your verdict on criterion: {criterion_id}\n\n"
             f"{evidence_block}\n\n"
@@ -219,7 +198,7 @@ def _invoke_judge(
         logger.error("LLM not configured: %s", exc)
         # Deterministic fallback when no LLM is available
         return JudicialOpinion(
-            judge=persona,          # type: ignore[arg-type]
+            judge=persona,  # type: ignore[arg-type]
             criterion_id=criterion_id,
             score=3,
             argument=f"[LLM UNAVAILABLE] Default score assigned. {exc}",
@@ -231,9 +210,9 @@ def _invoke_judge(
         return None
 
 
-# ─────────────────────────────────────────────
-#  GENERIC JUDGE NODE FACTORY
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# GENERIC JUDGE NODE FACTORY
+# ─────────────────────────────────────────────────────────────
 
 def _judge_node(state: AgentState, persona: str, system_prompt: str) -> dict:
     """
@@ -262,9 +241,9 @@ def _judge_node(state: AgentState, persona: str, system_prompt: str) -> dict:
     return {"opinions": opinions}
 
 
-# ─────────────────────────────────────────────
-#  JUDGE NODES (registered in graph.py)
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# JUDGE NODES (registered in graph.py)
+# ─────────────────────────────────────────────────────────────
 
 def prosecutor_node(state: AgentState) -> dict:
     """The Prosecutor — finds violations, charges fraud, argues for low scores."""

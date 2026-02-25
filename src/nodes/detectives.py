@@ -2,21 +2,17 @@
 src/nodes/detectives.py
 ───────────────────────
 Layer 1: The Detective Layer — Forensic Sub-Agents
-
 Three agents run in PARALLEL via LangGraph fan-out.
 They do NOT opinionate. They collect facts only.
 Output: structured Evidence objects stored under unique keys in state.evidences.
-
-  RepoInvestigator  → clones + AST-analyses the GitHub repository
-  DocAnalyst        → parses and cross-references the PDF report
-  VisionInspector   → classifies embedded diagrams via multimodal LLM (optional)
-  EvidenceAggregator → fan-in synchronisation barrier
+RepoInvestigator  → clones + AST-analyses the GitHub repository
+DocAnalyst        → parses and cross-references the PDF report
+VisionInspector   → classifies embedded diagrams via multimodal LLM (optional)
+EvidenceAggregator → fan-in synchronisation barrier
 """
-
 import logging
 import os
 from typing import Dict, List
-
 from src.state import (
     AgentState, DocEvidence, Evidence, RepoEvidence, VisionEvidence,
 )
@@ -50,14 +46,13 @@ TARGET_TO_KEYS = {
 }
 
 
-# ─────────────────────────────────────────────
-#  DETECTIVE 1: RepoInvestigator
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# DETECTIVE 1: RepoInvestigator
+# ─────────────────────────────────────────────────────────────
 
 def repo_investigator_node(state: AgentState) -> dict:
     """
     RepoInvestigator — The Code Detective.
-
     Clones the target repo into a sandboxed TemporaryDirectory and runs
     5 forensic protocols via AST analysis (not regex):
       A. Git Forensic Analysis
@@ -95,7 +90,7 @@ def repo_investigator_node(state: AgentState) -> dict:
 
     try:
         logger.info("  Protocol A: Git History")
-        git_ev  = extract_git_history(repo_path)
+        git_ev = extract_git_history(repo_path)
 
         logger.info("  Protocol B: State Management")
         state_ev = analyze_state_management(repo_path)
@@ -132,10 +127,10 @@ def repo_investigator_node(state: AgentState) -> dict:
             "repo_evidence": repo_evidence,
             "evidences": {
                 # Keys match rubric dimension IDs exactly
-                "git_forensic_analysis":        [git_ev],
-                "state_management_rigor":        [state_ev],
-                "graph_orchestration":           [graph_ev],
-                "safe_tool_engineering":         [tools_ev],
+                "git_forensic_analysis": [git_ev],
+                "state_management_rigor": [state_ev],
+                "graph_orchestration": [graph_ev],
+                "safe_tool_engineering": [tools_ev],
                 "structured_output_enforcement": [output_ev],
             },
         }
@@ -152,14 +147,13 @@ def repo_investigator_node(state: AgentState) -> dict:
                 logger.warning("Tmpdir cleanup failed: %s", exc)
 
 
-# ─────────────────────────────────────────────
-#  DETECTIVE 2: DocAnalyst
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# DETECTIVE 2: DocAnalyst
+# ─────────────────────────────────────────────────────────────
 
 def doc_analyst_node(state: AgentState) -> dict:
     """
     DocAnalyst — The Paperwork Detective.
-
     Analyses the PDF report for:
       A. Theoretical depth (genuine understanding vs buzzword-dropping)
       B. Hallucination check (claimed file paths vs repo files)
@@ -176,14 +170,14 @@ def doc_analyst_node(state: AgentState) -> dict:
             "errors": [f"DocAnalyst: PDF not found at '{pdf_path}'"],
             "evidences": {
                 "theoretical_depth": [missing],
-                "report_accuracy":   [missing],
+                "report_accuracy": [missing],
             },
         }
 
     # Best-effort: use repo file list if already in state (may be empty in parallel run)
     repo_ev = state.get("repo_evidence")
     repo_files = []
-    repo_root  = ""
+    repo_root = ""
     if repo_ev and hasattr(repo_ev, "raw_findings"):
         repo_files = repo_ev.raw_findings.get("python_files", [])
 
@@ -200,7 +194,7 @@ def doc_analyst_node(state: AgentState) -> dict:
             "doc_evidence": doc_evidence,
             "evidences": {
                 "theoretical_depth": [doc_evidence.theoretical_depth],
-                "report_accuracy":   [doc_evidence.hallucination_check],
+                "report_accuracy": [doc_evidence.hallucination_check],
             },
         }
     except Exception as exc:
@@ -208,14 +202,13 @@ def doc_analyst_node(state: AgentState) -> dict:
         return {"errors": [f"DocAnalyst crashed: {exc}"]}
 
 
-# ─────────────────────────────────────────────
-#  DETECTIVE 3: VisionInspector
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# DETECTIVE 3: VisionInspector
+# ─────────────────────────────────────────────────────────────
 
 def vision_inspector_node(state: AgentState) -> dict:
     """
     VisionInspector — The Diagram Detective.
-
     Extracts images from the PDF and asks a multimodal LLM to classify
     whether the diagram correctly shows the parallel LangGraph topology.
     Execution is optional per the spec — gracefully degrades.
@@ -230,7 +223,7 @@ def vision_inspector_node(state: AgentState) -> dict:
 
     try:
         vision_ev = analyze_diagrams(pdf_path)
-        evidence  = vision_evidence_to_evidence(vision_ev)
+        evidence = vision_evidence_to_evidence(vision_ev)
 
         logger.info(
             "  ✅ VisionInspector done: type=%s parallel=%s",
@@ -246,14 +239,13 @@ def vision_inspector_node(state: AgentState) -> dict:
         return {"errors": [f"VisionInspector crashed: {exc}"]}
 
 
-# ─────────────────────────────────────────────
-#  FAN-IN: EvidenceAggregator
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# FAN-IN: EvidenceAggregator
+# ─────────────────────────────────────────────────────────────
 
 def evidence_aggregator_node(state: AgentState) -> dict:
     """
     Synchronisation barrier — waits for ALL parallel detectives to finish.
-
     Implements the Targeting Protocol from the spec:
       • Validates that every rubric dimension has corresponding evidence
       • Logs a forensic summary of all collected evidence
@@ -263,8 +255,8 @@ def evidence_aggregator_node(state: AgentState) -> dict:
       [RepoInvestigator || DocAnalyst || VisionInspector] → EvidenceAggregator → Judges
     """
     evidences = state.get("evidences", {})
-    errors    = state.get("errors", [])
-    dims      = state.get("rubric_dimensions", [])
+    errors = state.get("errors", [])
+    dims = state.get("rubric_dimensions", [])
 
     ev_count = sum(len(v) for v in evidences.values())
     logger.info(
@@ -290,9 +282,9 @@ def evidence_aggregator_node(state: AgentState) -> dict:
     return {}  # Fan-in checkpoint — no state mutation needed
 
 
-# ─────────────────────────────────────────────
-#  HELPERS
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# HELPERS
+# ─────────────────────────────────────────────────────────────
 
 def _missing_evidence(goal: str, location: str) -> Evidence:
     return Evidence(
