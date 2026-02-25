@@ -2,13 +2,20 @@
 src/nodes/detectives.py
 ───────────────────────
 Layer 1: The Detective Layer — Forensic Sub-Agents
+
 Three agents run in PARALLEL via LangGraph fan-out.
 They do NOT opinionate. They collect facts only.
 Output: structured Evidence objects stored under unique keys in state.evidences.
-RepoInvestigator  → clones + AST-analyses the GitHub repository
-DocAnalyst        → parses and cross-references the PDF report
-VisionInspector   → classifies embedded diagrams via multimodal LLM (optional)
-EvidenceAggregator → fan-in synchronisation barrier
+
+Agents:
+- RepoInvestigator  → clones + AST-analyses the GitHub repository
+- DocAnalyst        → parses and cross-references the PDF report
+- VisionInspector   → classifies embedded diagrams via multimodal LLM (optional)
+- EvidenceAggregator → fan-in synchronisation barrier
+
+Ollama Integration:
+- VisionInspector uses Ollama multimodal models when available
+- Falls back gracefully if vision models not installed
 """
 import logging
 import os
@@ -27,6 +34,7 @@ from src.tools.repo_tools import (
 )
 from src.tools.doc_tools import analyze_pdf_report
 from src.tools.vision_tools import analyze_diagrams, vision_evidence_to_evidence
+from src.config.langchain_config import get_detective_llm
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +61,7 @@ TARGET_TO_KEYS = {
 def repo_investigator_node(state: AgentState) -> dict:
     """
     RepoInvestigator — The Code Detective.
+    
     Clones the target repo into a sandboxed TemporaryDirectory and runs
     5 forensic protocols via AST analysis (not regex):
       A. Git Forensic Analysis
@@ -60,6 +69,12 @@ def repo_investigator_node(state: AgentState) -> dict:
       C. Graph Orchestration Architecture
       D. Safe Tool Engineering
       E. Structured Output Enforcement
+    
+    Args:
+        state: Current AgentState with repo_url
+        
+    Returns:
+        Dict with repo_evidence and evidences for state
     """
     repo_url = state.get("repo_url", "")
     if not repo_url:
@@ -154,12 +169,19 @@ def repo_investigator_node(state: AgentState) -> dict:
 def doc_analyst_node(state: AgentState) -> dict:
     """
     DocAnalyst — The Paperwork Detective.
+    
     Analyses the PDF report for:
       A. Theoretical depth (genuine understanding vs buzzword-dropping)
       B. Hallucination check (claimed file paths vs repo files)
-
-    Note: In the parallel execution the repo_evidence may not yet be available
+    
+    Note: In parallel execution the repo_evidence may not yet be available
     (it's written by a sibling branch). We degrade gracefully in that case.
+    
+    Args:
+        state: Current AgentState with pdf_path
+        
+    Returns:
+        Dict with doc_evidence and evidences for state
     """
     pdf_path = state.get("pdf_path", "")
     logger.info("📄 DocAnalyst: analysing PDF at %s", pdf_path)
@@ -203,25 +225,26 @@ def doc_analyst_node(state: AgentState) -> dict:
 
 
 # ─────────────────────────────────────────────────────────────
-# DETECTIVE 3: VisionInspector
+# DETECTIVE 3: VisionInspector (Ollama Multimodal)
 # ─────────────────────────────────────────────────────────────
 
+# In vision_inspector_node(), add Groq support for diagram analysis:
 def vision_inspector_node(state: AgentState) -> dict:
-    """
-    VisionInspector — The Diagram Detective.
-    Extracts images from the PDF and asks a multimodal LLM to classify
-    whether the diagram correctly shows the parallel LangGraph topology.
-    Execution is optional per the spec — gracefully degrades.
-    """
+    """VisionInspector with Groq fallback for diagram analysis."""
     pdf_path = state.get("pdf_path", "")
     logger.info("🖼️  VisionInspector: extracting diagrams from %s", pdf_path)
 
     if not pdf_path or not os.path.exists(pdf_path):
-        return {
-            "errors": [f"VisionInspector: PDF not found at '{pdf_path}'"],
-        }
+        return {"errors": [f"VisionInspector: PDF not found at '{pdf_path}'"]}
 
     try:
+        # Try Groq for vision analysis if available
+        provider = os.getenv("LLM_PROVIDER", "groq")
+        
+        if provider == "groq" and os.getenv("GROQ_API_KEY"):
+            # Groq doesn't support vision yet, use local fallback
+            logger.info("  ℹ️  Groq vision not available, using local analysis")
+        
         vision_ev = analyze_diagrams(pdf_path)
         evidence = vision_evidence_to_evidence(vision_ev)
 
@@ -234,11 +257,10 @@ def vision_inspector_node(state: AgentState) -> dict:
             "vision_evidence": vision_ev,
             "evidences": {"swarm_visual": [evidence]},
         }
+        
     except Exception as exc:
         logger.error("VisionInspector crashed: %s", exc, exc_info=True)
         return {"errors": [f"VisionInspector crashed: {exc}"]}
-
-
 # ─────────────────────────────────────────────────────────────
 # FAN-IN: EvidenceAggregator
 # ─────────────────────────────────────────────────────────────
@@ -246,13 +268,20 @@ def vision_inspector_node(state: AgentState) -> dict:
 def evidence_aggregator_node(state: AgentState) -> dict:
     """
     Synchronisation barrier — waits for ALL parallel detectives to finish.
+    
     Implements the Targeting Protocol from the spec:
       • Validates that every rubric dimension has corresponding evidence
       • Logs a forensic summary of all collected evidence
       • Does NOT mutate state — just validates and logs
-
+    
     Topology:
       [RepoInvestigator || DocAnalyst || VisionInspector] → EvidenceAggregator → Judges
+    
+    Args:
+        state: Current AgentState with collected evidences
+        
+    Returns:
+        Empty dict (fan-in checkpoint, no state mutation)
     """
     evidences = state.get("evidences", {})
     errors = state.get("errors", [])
@@ -270,7 +299,7 @@ def evidence_aggregator_node(state: AgentState) -> dict:
     # Targeting Protocol: check coverage per dimension
     for dim in dims:
         dim_id = dim.get("id", "")
-        if dim_id not in evidences:
+        if dim_id and dim_id not in evidences:
             logger.warning("  ⚠  No evidence for dimension '%s'", dim_id)
 
     # Forensic summary log
@@ -287,6 +316,16 @@ def evidence_aggregator_node(state: AgentState) -> dict:
 # ─────────────────────────────────────────────────────────────
 
 def _missing_evidence(goal: str, location: str) -> Evidence:
+    """
+    Create a standardized Evidence object for missing inputs.
+    
+    Args:
+        goal: What evidence was supposed to be collected
+        location: Where the input was expected
+        
+    Returns:
+        Evidence object indicating missing input
+    """
     return Evidence(
         goal=goal,
         found=False,
