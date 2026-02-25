@@ -241,20 +241,21 @@ def run_audit(
     return final
 
 
-# ─────────────────────────────────────────────────────────────
-# CLI ENTRY POINT
-# ─────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────
+# CLI ENTRY POINT (Fixed)
+# ──────────────────────────────────────────────
 
 if __name__ == "__main__":
     import sys
+    
     if len(sys.argv) < 2:
-        print("Usage: python -m src.graph  <github_url> [pdf_path] [self|peer|received]")
+        print("Usage: python -m src.graph <github_url> [pdf_path] [self|peer|received]")
         sys.exit(1)
 
     result = run_audit(
         repo_url=sys.argv[1],
-        pdf_path=sys.argv[2] if len(sys.argv) > 2 else "",
-        audit_type=sys.argv[3] if len(sys.argv) > 3 else "peer",
+        pdf_path=sys.argv[2] if len(sys.argv) > 2 else "",  # ✅ Fixed: no trailing space
+        audit_type=sys.argv[3] if len(sys.argv) > 3 else "peer",  # ✅ Fixed: no trailing space
     )
 
     ar = result.get("final_report")
