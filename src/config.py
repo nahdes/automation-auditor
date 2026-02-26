@@ -3,11 +3,15 @@ src/config.py
 ─────────────
 Configuration validation and environment variable management.
 """
+import logging
 import os
 from pathlib import Path
 from typing import Optional
 from pydantic import BaseModel, Field, field_validator
-
+from dotenv import load_dotenv
+# Load .env at module import time (works for tests + main app)
+load_dotenv(override=True)   # override=True so it always wins over system env
+logger = logging.getLogger(__name__)
 class Settings(BaseModel):
     """Application settings with validation."""
     

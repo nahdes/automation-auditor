@@ -142,6 +142,7 @@ requires-dist = [
     { name = "langchain", specifier = ">=0.3.0" },
     { name = "langchain-anthropic", specifier = ">=0.2.0" },
     { name = "langchain-core", specifier = ">=0.3.0" },
+    { name = "langchain-groq", specifier = ">=0.1.0" },
     { name = "langchain-groq", specifier = ">=1.1.2" },
     { name = "langchain-openai", specifier = ">=0.2.0" },
     { name = "langgraph", specifier = ">=0.2.0" },
