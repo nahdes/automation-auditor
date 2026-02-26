@@ -1,4 +1,4 @@
-"""
+﻿"""
 src/nodes/judges.py
 ───────────────────
 Layer 2: The Judicial Layer — The Dialectical Bench
