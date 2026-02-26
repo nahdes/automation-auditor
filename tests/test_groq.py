@@ -1,4 +1,4 @@
-"""tests/test_groq.py - Groq integration tests."""
+﻿"""tests/test_groq.py - Groq integration tests."""
 import pytest
 import os
 from pathlib import Path
@@ -22,7 +22,7 @@ class TestGroqConnection:
         """Test Groq LLM can be initialized."""
         from src.config.langchain_config import get_llm
         
-        llm = get_llm(provider="groq", model_name="llama3-8b-8192")
+        llm = get_llm(provider="groq", model_name="llama-3.1-8b-instant")
         assert llm is not None
         assert hasattr(llm, "invoke")
     
@@ -31,7 +31,7 @@ class TestGroqConnection:
         """Test Groq can generate a response."""
         from src.config.langchain_config import get_llm
         
-        llm = get_llm(provider="groq", model_name="llama3-8b-8192", temperature=0)
+        llm = get_llm(provider="groq", model_name="llama-3.1-8b-instant", temperature=0)
         response = llm.invoke("What is LangGraph in one sentence?")
         
         assert response is not None
@@ -45,7 +45,7 @@ class TestGroqConnection:
         from src.state import JudicialOpinion
         from src.config.langchain_config import get_llm
         
-        llm = get_llm(provider="groq", model_name="llama3-8b-8192")
+        llm = get_llm(provider="groq", model_name="llama-3.1-8b-instant")
         structured_llm = llm.with_structured_output(JudicialOpinion)
         
         # This should not raise an error
