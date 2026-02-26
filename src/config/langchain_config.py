@@ -8,6 +8,11 @@ import os
 import logging
 from typing import Optional, TYPE_CHECKING
 from langchain_core.language_models import BaseChatModel
+from dotenv import load_dotenv
+# Load .env at module import time (works for tests + main app)
+load_dotenv(override=True)   # override=True so it always wins over system env
+
+logger = logging.getLogger(__name__)
 
 # Type checking only - avoids runtime import errors
 if TYPE_CHECKING:
